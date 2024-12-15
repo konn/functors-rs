@@ -144,3 +144,22 @@ impl<E> Monad for ResultFunctor<E> {
         fa.and_then(f)
     }
 }
+
+pub trait MonadFail: Monad {
+    type Error;
+    fn fail<A>(msg: Self::Error) -> Self::Container<A>;
+}
+
+impl MonadFail for OptionFunctor {
+    type Error = ();
+    fn fail<A>(_: Self::Error) -> Self::Container<A> {
+        None
+    }
+}
+
+impl<E> MonadFail for ResultFunctor<E> {
+    type Error = E;
+    fn fail<A>(err: Self::Error) -> Self::Container<A> {
+        Err(err)
+    }
+}
