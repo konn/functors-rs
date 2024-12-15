@@ -1,3 +1,4 @@
+use super::control;
 use super::*;
 
 pub trait Functor {
@@ -89,6 +90,22 @@ pub trait Applicative: Functor {
         F: FnMut(A, B) -> C;
 }
 
+impl Applicative for IdentityFunctor {
+    fn dpure<A: Clone>(a: A) -> Self::Container<A> {
+        a
+    }
+    fn d_zip_with<A, B, C, F>(
+        mut f: F,
+        a: Self::Container<A>,
+        b: Self::Container<B>,
+    ) -> Self::Container<C>
+    where
+        F: FnMut(A, B) -> C,
+    {
+        f(a, b)
+    }
+}
+
 impl Applicative for OptionFunctor {
     fn dpure<A: Clone>(a: A) -> Self::Container<A> {
         Some(a)
@@ -125,20 +142,31 @@ pub trait Traversable: Functor {
     fn traverse<F, A, B, G>(f: G, fa: Self::Container<A>) -> F::Container<Self::Container<B>>
     where
         B: Clone,
-        F: Applicative,
+        F: control::Applicative,
         G: FnMut(A) -> F::Container<B>;
 }
 
-impl Traversable for OptionFunctor {
+impl Traversable for IdentityFunctor {
     fn traverse<F, A, B, G>(mut f: G, fa: Self::Container<A>) -> F::Container<Self::Container<B>>
     where
         B: Clone,
         F: Applicative,
         G: FnMut(A) -> F::Container<B>,
     {
+        f(fa)
+    }
+}
+
+impl Traversable for OptionFunctor {
+    fn traverse<F, A, B, G>(mut f: G, fa: Self::Container<A>) -> F::Container<Self::Container<B>>
+    where
+        B: Clone,
+        F: control::Applicative,
+        G: FnMut(A) -> F::Container<B>,
+    {
         match fa {
-            Some(a) => F::dmap(Some, f(a)),
-            None => F::dpure(None),
+            Some(a) => F::fmap(Some, f(a)),
+            None => F::pure(None),
         }
     }
 }
@@ -147,12 +175,12 @@ impl<E: Clone> Traversable for ResultFunctor<E> {
     fn traverse<F, A, B, G>(mut f: G, fa: Self::Container<A>) -> F::Container<Self::Container<B>>
     where
         B: Clone,
-        F: Applicative,
+        F: control::Applicative,
         G: FnMut(A) -> F::Container<B>,
     {
         match fa {
-            Ok(a) => F::dmap(Ok, f(a)),
-            Err(e) => F::dpure(Err(e)),
+            Ok(a) => F::fmap(Ok, f(a)),
+            Err(e) => F::pure(Err(e)),
         }
     }
 }
@@ -161,13 +189,13 @@ impl Traversable for VecFunctor {
     fn traverse<F, A, B, G>(mut f: G, fa: Self::Container<A>) -> F::Container<Self::Container<B>>
     where
         B: Clone,
-        F: Applicative,
+        F: control::Applicative,
         G: FnMut(A) -> F::Container<B>,
     {
-        let mut result = F::dpure(Vec::new());
+        let mut result = F::pure(Vec::new());
         for a in fa {
             let b = f(a);
-            result = F::d_zip_with(
+            result = F::zip_with(
                 |mut v, b| {
                     v.push(b);
                     v
